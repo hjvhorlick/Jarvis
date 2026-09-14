@@ -26,8 +26,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
-        run: python -m pytest -q
+      - name: Unit and integration tests
+        run: python -m pytest -q --ignore=tests/test_e2e.py
+
+      # Separate step so its conclusion is visible in the API: this is the proof
+      # the real-SDK end-to-end tests actually ran rather than being skipped.
+      - name: End-to-end against the fake Gemini endpoint
+        run: python -m pytest tests/test_e2e.py -q
 
       - name: CLI smoke test (offline mock model)
         env:
