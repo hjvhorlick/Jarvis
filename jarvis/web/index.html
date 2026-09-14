@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jarvis</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" aria-hidden="true"></span>
+      <h1>Jarvis</h1>
+    </div>
+    <div class="status" id="status">connecting…</div>
+    <div class="actions">
+      <button id="resetBtn" class="ghost" title="Clear conversation">Reset</button>
+      <button id="settingsBtn" class="ghost" title="API key and model settings">Settings</button>
+    </div>
+  </header>
+
+  <section class="panel hidden" id="settingsPanel" aria-label="Settings">
+    <h2>Google AI Studio</h2>
+    <label class="row">
+      <span>Route</span>
+      <select id="route">
+        <option value="server">Through this server (key stays server-side)</option>
+        <option value="browser">Browser → Google direct (key stays in this browser)</option>
+      </select>
+    </label>
+    <label class="row">
+      <span>API key</span>
+      <input id="apiKey" type="password" placeholder="AQ.… or AIza…" autocomplete="off" spellcheck="false" />
+    </label>
+    <label class="row">
+      <span>Model</span>
+      <input id="model" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false" />
+    </label>
+    <label class="row">
+      <span>Server token</span>
+      <input id="authToken" type="password" placeholder="only if JARVIS_AUTH_TOKEN is set"
+             autocomplete="off" spellcheck="false" />
+    </label>
+    <label class="check">
+      <input id="rememberKey" type="checkbox" />
+      <span>Remember the key in this browser (otherwise it is cleared when the tab closes)</span>
+    </label>
+    <p class="hint" id="keyHint"></p>
+    <button id="saveKey" class="primary">Save</button>
+    <p class="hint">
+      Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>.
+      Both the new <code>AQ.</code> Auth keys and legacy <code>AIza</code> keys are accepted — Jarvis never checks the format.
+      The server-side key is held in memory only and is never written to disk.
+      Use the direct route if the machine hosting this app cannot reach Google.
+      Set the model to <code>mock</code> to try the app with no API calls at all.
+      The server never returns a key — only a masked hint. By default a browser-side
+      key is dropped when the tab closes; tick the box to keep it longer.
+    </p>
+  </section>
+
+  <main class="chat" id="chat" aria-live="polite"></main>
+
+  <form class="composer" id="composer">
+    <textarea id="input" rows="1" placeholder="Ask Jarvis something… (Enter to send, Shift+Enter for a newline)"
+              autocomplete="off"></textarea>
+    <button id="sendBtn" class="primary" type="submit">Send</button>
+  </form>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

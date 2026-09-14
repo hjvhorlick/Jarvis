@@ -1,0 +1,55 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Unit and integration tests
+        run: python -m pytest -q --ignore=tests/test_e2e.py
+
+      # Separate step so its conclusion is visible in the API: this is the proof
+      # the real-SDK end-to-end tests actually ran rather than being skipped.
+      - name: End-to-end against the fake Gemini endpoint
+        run: python -m pytest tests/test_e2e.py -q
+
+      - name: CLI smoke test (offline mock model)
+        env:
+          JARVIS_MODEL: mock
+        run: python -m jarvis chat -m "ci smoke test" --no-save
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install jsdom
+        run: npm install --no-save jsdom
+
+      - name: Drive the real app.js
+        run: node tests/web/verify-ui.js
