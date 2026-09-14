@@ -50,7 +50,11 @@ class Assistant:
                 "No Google AI Studio API key found. Set GEMINI_API_KEY in .env, "
                 "or paste a key in the web UI's Settings panel."
             )
-        return gemini_transport(api_key=self.settings.api_key, model=self.settings.model)
+        return gemini_transport(
+            api_key=self.settings.api_key,
+            model=self.settings.model,
+            base_url=self.settings.base_url,
+        )
 
     # --------------------------------------------------------------------- reply
     def stream(self, history: Iterable[Message]) -> Iterator[str]:
@@ -85,7 +89,7 @@ def mock_transport(reply: str | None = None) -> Transport:
     return transport
 
 
-def gemini_transport(api_key: str, model: str) -> Transport:
+def gemini_transport(api_key: str, model: str, base_url: str = "") -> Transport:
     """Real transport using the official ``google-genai`` SDK."""
 
     def transport(history: list[Message], system_prompt: str) -> Iterator[str]:
@@ -102,7 +106,12 @@ def gemini_transport(api_key: str, model: str) -> Transport:
             for message in history
         ]
         try:
-            client = genai.Client(api_key=api_key)
+            # Only pass http_options when overriding the endpoint, so the default
+            # path stays byte-identical to a plain genai.Client(api_key=...).
+            kwargs = {}
+            if base_url:
+                kwargs["http_options"] = genai_types.HttpOptions(base_url=base_url)
+            client = genai.Client(api_key=api_key, **kwargs)
             config = genai_types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,

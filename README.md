@@ -14,7 +14,7 @@ jarvis/
   security.py  key redaction + masking
   web/         the chat UI (no build step, no JS dependencies)
 tests/web/     jsdom harness that drives the real app.js
-tests/         89 pytest tests + 24 browser checks, all offline
+tests/         96 pytest tests + 24 browser checks, all offline
 ```
 
 ## Setup
@@ -71,6 +71,7 @@ canned responder, so you can develop the UI without burning quota.
 | `JARVIS_DATA_DIR`     | `./data`              | Where `history.json` lives                 |
 | `JARVIS_AUTH_TOKEN`   | — (auth off)          | When set, every POST needs `Authorization: Bearer <token>` |
 | `JARVIS_EXPOSE_DOCS`  | auto                  | Force `/docs` + `/openapi.json` on (`1`) or off (`0`). Auto = off when a token is set |
+| `JARVIS_BASE_URL`     | Google's endpoint     | Override the Gemini API endpoint (proxy, gateway, or local test server) |
 
 ## API
 
@@ -107,11 +108,28 @@ The Settings panel in the UI offers both:
 ## Tests
 
 ```bash
-python -m pytest          # 89 passed
+python -m pytest          # 96 passed
 ```
 
 The Gemini transport is driven by a stubbed client in tests, so the request
 payload, chunk parsing, and error mapping are covered without network access.
+
+### End to end
+
+`tests/test_e2e.py` goes further: it starts `tests/web/fake_gemini.py`, a local
+server that speaks the real Gemini REST protocol, and points the **genuine**
+`google-genai` SDK at it via `JARVIS_BASE_URL`. Request serialisation, HTTP
+transport, SSE parsing, conversation assembly, rollback and restart-durability
+are all exercised for real — only the model is fake. This is the closest the
+suite gets to a live call without egress to Google, and it is what proves the
+app holds a conversation rather than each layer working in isolation.
+
+Run the fake endpoint by hand to try it:
+
+```bash
+python tests/web/fake_gemini.py --port 8099 &
+GEMINI_API_KEY=any-key JARVIS_BASE_URL=http://127.0.0.1:8099 python -m jarvis
+```
 
 ### Browser side
 

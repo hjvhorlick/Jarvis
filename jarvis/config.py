@@ -41,6 +41,7 @@ class Settings:
     model: str = DEFAULT_MODEL
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     max_turns: int = 40
+    base_url: str = ""
     host: str = "0.0.0.0"
     port: int = 8000
     data_dir: Path = field(default_factory=lambda: REPO_ROOT / "data")
@@ -73,6 +74,7 @@ class Settings:
         return Settings(
             api_key=self.api_key,
             auth_token=self.auth_token,
+            base_url=self.base_url,
             model=self.model,
             system_prompt=self.system_prompt,
             max_turns=self.max_turns,
@@ -88,6 +90,7 @@ def load_settings(**overrides: object) -> Settings:
     settings = Settings(
         api_key=env.get("GEMINI_API_KEY", "").strip(),
         auth_token=env.get("JARVIS_AUTH_TOKEN", "").strip(),
+        base_url=env.get("JARVIS_BASE_URL", "").strip(),
         model=env.get("JARVIS_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL,
         system_prompt=env.get("JARVIS_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT).strip()
         or DEFAULT_SYSTEM_PROMPT,
