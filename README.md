@@ -27,6 +27,13 @@ cp .env.example .env                                  # then paste your key
 
 `.env` holds `GEMINI_API_KEY`. It is git-ignored — never commit it.
 
+> **Key format:** AI Studio now issues **Auth keys** starting with `AQ.` instead of
+> the legacy `AIza` "traffic keys". Both work here — Jarvis passes the key straight
+> to `google-genai` (which sends it as the `x-goog-api-key` header) and never
+> validates its shape. There is a regression test guarding that. Note that `AQ.`
+> keys are rejected by OpenAI-compatible endpoints; Jarvis uses the native Gemini
+> endpoint, so this does not apply.
+
 ## Run
 
 **Web app** — <http://localhost:8000>

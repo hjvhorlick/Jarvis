@@ -30,7 +30,7 @@
     </label>
     <label class="row">
       <span>API key</span>
-      <input id="apiKey" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false" />
+      <input id="apiKey" type="password" placeholder="AQ.… or AIza…" autocomplete="off" spellcheck="false" />
     </label>
     <label class="row">
       <span>Model</span>
@@ -40,6 +40,7 @@
     <button id="saveKey" class="primary">Save</button>
     <p class="hint">
       Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>.
+      Both the new <code>AQ.</code> Auth keys and legacy <code>AIza</code> keys are accepted — Jarvis never checks the format.
       The server-side key is held in memory only and is never written to disk.
       Use the direct route if the machine hosting this app cannot reach Google.
       Set the model to <code>mock</code> to try the app with no API calls at all.

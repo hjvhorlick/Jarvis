@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -171,3 +172,50 @@ def test_chunk_text_handles_missing_parts():
 def test_friendly_error_mapping(raw, expected):
     exc = RuntimeError(raw) if raw else RuntimeError()
     assert expected in _friendly(exc)
+
+
+# ------------------------------------------------- AI Studio key format support
+# AI Studio now issues "Auth keys" (AQ. prefix) instead of legacy AIza traffic
+# keys. Jarvis must stay format-agnostic: the key is an opaque string.
+AQ_KEY = "AQ.Ab8Rexample-not-a-real-key-value-here"
+AIZA_KEY = "AIzaSyExample-not-a-real-key-value"
+
+
+@pytest.mark.parametrize("key", [AQ_KEY, AIZA_KEY])
+def test_assistant_accepts_any_key_format(monkeypatch, key):
+    seen = {}
+
+    class FakeModels:
+        def generate_content_stream(self, model, contents, config):
+            yield types.SimpleNamespace(
+                candidates=[
+                    types.SimpleNamespace(content=types.SimpleNamespace(parts=[types.SimpleNamespace(text="ok")]))
+                ]
+            )
+
+    class FakeClient:
+        def __init__(self, api_key):
+            seen["api_key"] = api_key
+            self.models = FakeModels()
+
+    fake_types = types.SimpleNamespace(
+        GenerateContentConfig=lambda **kwargs: types.SimpleNamespace(**kwargs)
+    )
+    fake_module = types.SimpleNamespace(Client=FakeClient, types=fake_types)
+    monkeypatch.setitem(sys.modules, "google", types.SimpleNamespace(genai=fake_module))
+    monkeypatch.setitem(sys.modules, "google.genai", fake_module)
+
+    assistant = Assistant(Settings(api_key=key, model="gemini-2.5-flash"))
+    assert assistant.complete(history((USER, "hi"))) == "ok"
+    assert seen["api_key"] == key  # passed through verbatim, unmodified
+
+
+def test_no_key_format_validation_in_the_codebase():
+    """Guard against anyone reintroducing an AIza regex, which would reject AQ. keys."""
+    root = Path(__file__).resolve().parent.parent / "jarvis"
+    offenders = []
+    for path in root.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if "AIza" in source:
+            offenders.append(path.name)
+    assert offenders == [], f"hardcoded key format assumption in: {offenders}"
