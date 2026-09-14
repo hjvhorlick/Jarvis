@@ -174,3 +174,39 @@ def _tmpdir() -> Path:
     import tempfile
 
     return Path(tempfile.mkdtemp(prefix="jarvis-e2e-"))
+
+
+# ------------------------------------------------- long-conversation trimming
+def test_history_trimmed_past_max_turns_stays_valid_for_gemini(gemini_url):
+    """Once trimming kicks in, what reaches the model must still be well formed.
+
+    max_turns bounds *stored* history; the in-flight question is appended on top,
+    so a request carries at most max_turns + 1 messages. The important part is
+    structural: Gemini expects the first turn to be a user turn, never two model
+    turns in a row, and never an empty message.
+    """
+    max_turns = 4
+    client = TestClient(
+        create_app(settings_for(gemini_url, data_dir=_tmpdir(), max_turns=max_turns))
+    )
+
+    for i in range(1, 9):
+        response = client.post("/api/chat", json={"message": f"question {i}"})
+        assert response.status_code == 200
+
+        sent = fake_gemini.REQUESTS[-1]["contents"]
+        roles = [c["role"] for c in sent]
+
+        assert len(sent) <= max_turns + 1, f"turn {i}: sent {len(sent)} > {max_turns + 1}"
+        assert roles[0] == "user", f"turn {i}: history starts with {roles[0]!r}"
+        assert roles[-1] == "user", f"turn {i}: the new question must be last"
+        assert not any(
+            a == b == "model" for a, b in zip(roles, roles[1:])
+        ), f"turn {i}: consecutive model turns in {roles}"
+        assert all(c["parts"][0]["text"].strip() for c in sent), f"turn {i}: empty message sent"
+
+    # The oldest exchanges were dropped and the window slid forward. With
+    # max_turns=4 the stored window is [q6,a6,q7,a7], plus the new question.
+    last = fake_gemini.REQUESTS[-1]["contents"]
+    asked = [c["parts"][0]["text"] for c in last if c["role"] == "user"]
+    assert asked == ["question 6", "question 7", "question 8"], asked

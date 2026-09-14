@@ -14,7 +14,7 @@ jarvis/
   security.py  key redaction + masking
   web/         the chat UI (no build step, no JS dependencies)
 tests/web/     jsdom harness that drives the real app.js
-tests/         96 pytest tests + 24 browser checks, all offline
+tests/         97 pytest tests + 24 browser checks, all offline
 ```
 
 ## Setup
@@ -108,7 +108,7 @@ The Settings panel in the UI offers both:
 ## Tests
 
 ```bash
-python -m pytest          # 96 passed
+python -m pytest          # 97 passed
 ```
 
 The Gemini transport is driven by a stubbed client in tests, so the request
