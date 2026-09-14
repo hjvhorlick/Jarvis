@@ -97,9 +97,9 @@ def test_real_sdk_reaches_the_endpoint_with_the_right_request(gemini_url):
 
 
 # ------------------------------------------------------------ multi-turn history
-def test_history_grows_and_alternates_roles(gemini_url):
+def test_history_grows_and_alternates_roles(gemini_url, tmp_path):
     """The core behaviour: each turn must carry the whole prior conversation."""
-    app = create_app(settings_for(gemini_url, data_dir=_tmpdir()))
+    app = create_app(settings_for(gemini_url, data_dir=tmp_path))
     client = TestClient(app)
 
     for message in ("hello there", "greet me again please", "one more"):
@@ -118,8 +118,8 @@ def test_history_grows_and_alternates_roles(gemini_url):
     ]
 
 
-def test_stream_events_are_well_formed(gemini_url):
-    client = TestClient(create_app(settings_for(gemini_url, data_dir=_tmpdir())))
+def test_stream_events_are_well_formed(gemini_url, tmp_path):
+    client = TestClient(create_app(settings_for(gemini_url, data_dir=tmp_path)))
     response = client.post("/api/chat", json={"message": "hello there"})
     events = [
         json.loads(line[5:])
@@ -142,8 +142,8 @@ def test_rejected_key_produces_a_clean_error(gemini_url):
     assert BAD_KEY not in str(excinfo.value), "the key must not leak into the error"
 
 
-def test_rejected_key_over_http_rolls_back(gemini_url):
-    tmp = _tmpdir()
+def test_rejected_key_over_http_rolls_back(gemini_url, tmp_path):
+    tmp = tmp_path
     client = TestClient(create_app(settings_for(gemini_url, key=BAD_KEY, data_dir=tmp)))
     body = client.post("/api/chat", json={"message": "this will fail"}).text
     assert '"type": "error"' in body
@@ -156,8 +156,8 @@ def test_rejected_key_over_http_rolls_back(gemini_url):
 
 
 # ------------------------------------------------------- conversation durability
-def test_conversation_survives_a_restart(gemini_url):
-    tmp = _tmpdir()
+def test_conversation_survives_a_restart(gemini_url, tmp_path):
+    tmp = tmp_path
     client = TestClient(create_app(settings_for(gemini_url, data_dir=tmp)))
     client.post("/api/chat", json={"message": "hello there"})
 
@@ -170,14 +170,8 @@ def test_conversation_survives_a_restart(gemini_url):
     assert len(fake_gemini.REQUESTS[-1]["contents"]) == 3
 
 
-def _tmpdir() -> Path:
-    import tempfile
-
-    return Path(tempfile.mkdtemp(prefix="jarvis-e2e-"))
-
-
 # ------------------------------------------------- long-conversation trimming
-def test_history_trimmed_past_max_turns_stays_valid_for_gemini(gemini_url):
+def test_history_trimmed_past_max_turns_stays_valid_for_gemini(gemini_url, tmp_path):
     """Once trimming kicks in, what reaches the model must still be well formed.
 
     max_turns bounds *stored* history; the in-flight question is appended on top,
@@ -187,7 +181,7 @@ def test_history_trimmed_past_max_turns_stays_valid_for_gemini(gemini_url):
     """
     max_turns = 4
     client = TestClient(
-        create_app(settings_for(gemini_url, data_dir=_tmpdir(), max_turns=max_turns))
+        create_app(settings_for(gemini_url, data_dir=tmp_path, max_turns=max_turns))
     )
 
     for i in range(1, 9):
