@@ -14,5 +14,5 @@ venv/
 .pytest_cache/
 .mypy_cache/
 *.egg-info/
-node_modules/
+node_modules
 package-lock.json
