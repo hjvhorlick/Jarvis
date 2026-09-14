@@ -82,6 +82,8 @@ button.ghost { background: transparent; }
   padding: 8px 10px;
   font: inherit;
 }
+.panel .check { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 4px; color: var(--muted); font-size: 12.5px; }
+.panel .check input { flex: 0 0 auto; width: auto; margin-top: 2px; }
 .hint { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
 .hint a { color: var(--accent); }
 .hidden { display: none; }

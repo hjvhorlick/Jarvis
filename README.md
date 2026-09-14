@@ -10,9 +10,10 @@ jarvis/
   memory.py    conversation history + JSON persistence
   llm.py       Gemini streaming client (transport is injectable)
   cli.py       terminal chat
-  server.py    FastAPI app: SSE chat API, runtime key/model switch
+  server.py    FastAPI app: SSE chat API, runtime key/model switch, auth gate
+  security.py  key redaction + masking
   web/         the chat UI (no build step, no JS dependencies)
-tests/         53 tests, all offline — no API key or network needed
+tests/         77 tests, all offline — no API key or network needed
 ```
 
 ## Setup
@@ -67,6 +68,7 @@ canned responder, so you can develop the UI without burning quota.
 | `JARVIS_HOST`         | `0.0.0.0`             | Bind address                               |
 | `JARVIS_PORT`         | `8000`                | Port                                       |
 | `JARVIS_DATA_DIR`     | `./data`              | Where `history.json` lives                 |
+| `JARVIS_AUTH_TOKEN`   | — (auth off)          | When set, every POST needs `Authorization: Bearer <token>` |
 
 ## API
 
@@ -103,11 +105,36 @@ The Settings panel in the UI offers both:
 ## Tests
 
 ```bash
-python -m pytest          # 53 passed
+python -m pytest          # 77 passed
 ```
 
 The Gemini transport is driven by a stubbed client in tests, so the request
 payload, chunk parsing, and error mapping are covered without network access.
+
+## Key protection
+
+The API key is write-only. Once loaded it cannot be read back out:
+
+* **Never returned.** No endpoint echoes the key. `/api/health` reports only
+  `api_key_configured` plus a masked hint such as `AQ.Ab8…000`.
+* **Never on disk.** It lives in process memory; only the conversation is
+  persisted. A test asserts the key appears in no file under the data dir.
+* **Never in errors.** `jarvis/security.py` redacts the key — plus `key=`
+  query params, `x-goog-api-key` and `Authorization: Bearer` values — from
+  every message before it reaches the browser, the terminal, or a log line.
+  SDK/HTTP exceptions can quote the request they failed on; this is why.
+* **Not spendable by strangers.** Set `JARVIS_AUTH_TOKEN` and `/api/chat`,
+  `/api/key`, `/api/model` and `/api/reset` all require the bearer token
+  (constant-time compared). `/api/health` and the UI stay open so a page can
+  still discover that a token is needed. Without it, anyone who can reach the
+  port can use your key.
+* **Browser side is opt-in.** A browser-direct key goes to `sessionStorage` and
+  dies with the tab; the "Remember the key" checkbox is what moves it to
+  `localStorage`.
+
+Verified against a live server: with a key loaded, `GET /api/health`, `GET /`,
+`GET /static/app.js` and a streaming `POST /api/chat` all return responses
+containing no part of it.
 
 ## Durability notes
 

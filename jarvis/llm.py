@@ -10,6 +10,7 @@ from typing import Callable, Iterable, Iterator
 
 from .config import Settings
 from .memory import Message
+from .security import redact
 
 # transport(history, system_prompt) -> iterator of text chunks
 Transport = Callable[[list[Message], str], Iterator[str]]
@@ -115,7 +116,10 @@ def gemini_transport(api_key: str, model: str) -> Transport:
         except JarvisError:
             raise
         except Exception as exc:
-            raise JarvisError(f"Gemini request failed: {_friendly(exc)}") from exc
+            # Redact first: SDK/HTTP errors can quote the request, and the key
+            # must not travel back to a browser or a terminal.
+            detail = redact(_friendly(exc), api_key)
+            raise JarvisError(f"Gemini request failed: {detail}") from exc
 
     return transport
 

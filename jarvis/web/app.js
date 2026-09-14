@@ -4,6 +4,8 @@
 
   const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
   const LS_KEY = "jarvis.browserApiKey";
+  const SS_KEY = "jarvis.browserApiKey.session";
+  const SS_TOKEN = "jarvis.authToken";
   const LS_ROUTE = "jarvis.route";
   const LS_MODEL = "jarvis.model";
 
@@ -19,11 +21,36 @@
   const keyHint = document.getElementById("keyHint");
   const saveKeyBtn = document.getElementById("saveKey");
   const modelInput = document.getElementById("model");
+  const tokenInput = document.getElementById("authToken");
+  const rememberKey = document.getElementById("rememberKey");
   const resetBtn = document.getElementById("resetBtn");
 
   let serverState = { model: "gemini-2.5-flash", provider: "google-ai-studio", api_key_configured: false };
   let transcript = []; // [{role, text}] used by the browser-direct route
   let busy = false;
+
+  // --------------------------------------------------------------------- secrets
+  const readKey = () => (localStorage.getItem(LS_KEY) || sessionStorage.getItem(SS_KEY) || "").trim();
+
+  function storeKey(key) {
+    if (rememberKey.checked) {
+      localStorage.setItem(LS_KEY, key);
+      sessionStorage.removeItem(SS_KEY);
+    } else {
+      sessionStorage.setItem(SS_KEY, key);
+      localStorage.removeItem(LS_KEY); // never leave a copy behind
+    }
+  }
+
+  const readToken = () => sessionStorage.getItem(SS_TOKEN) || "";
+
+  /** Headers for calls to our own server, including the optional auth token. */
+  function serverHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    const token = readToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+  }
 
   // --------------------------------------------------------------------- helpers
   const setStatus = (text, cls = "") => {
@@ -77,9 +104,12 @@
   async function streamViaServer(message, sink) {
     const response = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: serverHeaders(),
       body: JSON.stringify({ message }),
     });
+    if (response.status === 401) {
+      throw new Error("This server requires a token. Open Settings and set the server token.");
+    }
     if (!response.ok || !response.body) {
       const detail = await response.text().catch(() => "");
       throw new Error(`Server error ${response.status} ${detail}`.trim());
@@ -92,7 +122,7 @@
 
   // --------------------------------------------------------------- direct route
   async function streamViaBrowser(message, sink) {
-    const key = (localStorage.getItem(LS_KEY) || "").trim();
+    const key = readKey();
     if (!key) throw new Error("No API key saved in this browser. Open Settings and paste one.");
     const model = serverState.model || "gemini-2.5-flash";
     const contents = transcript.concat([{ role: "user", parts: [{ text: message }] }]).map((m) => ({
@@ -162,13 +192,18 @@
       serverState = await res.json();
       if (!modelInput.value) modelInput.value = localStorage.getItem(LS_MODEL) || serverState.model;
       const route = routeSel.value === "browser" ? "browser-direct" : "server";
-      const keyed = routeSel.value === "browser" ? !!localStorage.getItem(LS_KEY) : serverState.api_key_configured;
+      const keyed = routeSel.value === "browser" ? !!readKey() : serverState.api_key_configured;
+      const auth = serverState.auth_required ? " · token required" : "";
       setStatus(
-        `${serverState.model} · ${serverState.provider} · ${route} · ${keyed ? "key set" : "NO KEY"}`,
+        `${serverState.model} · ${serverState.provider} · ${route} · ${keyed ? "key set" : "NO KEY"}${auth}`,
         keyed ? "ok" : "warn"
       );
+      if (!tokenInput.value) tokenInput.value = readToken();
+      rememberKey.checked = !!localStorage.getItem(LS_KEY);
       keyHint.textContent = keyed
-        ? "A key is configured for this route."
+        ? `A key is configured for this route${
+            serverState.api_key_hint ? ` (${serverState.api_key_hint})` : ""
+          }.`
         : "No key yet for this route — paste one below.";
       if (serverState.messages && serverState.messages.length && !chat.childElementCount) {
         for (const m of serverState.messages) addMessage(m.role, m.text);
@@ -182,25 +217,30 @@
   async function saveKey() {
     const key = keyInput.value.trim();
     const model = modelInput.value.trim();
-    localStorage.setItem(LS_KEY, key);
+    const token = tokenInput.value.trim();
+    if (token) sessionStorage.setItem(SS_TOKEN, token);
+    storeKey(key);
     localStorage.setItem(LS_MODEL, model || serverState.model);
 
     if (routeSel.value === "browser") {
       keyInput.value = "";
+      tokenInput.value = "";
       await refreshHealth();
       return;
     }
     try {
       const post = (url, body) =>
-        fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }).then((r) => r.json());
+        fetch(url, { method: "POST", headers: serverHeaders(), body: JSON.stringify(body) }).then(
+          async (r) => {
+            if (r.status === 401) throw new Error("wrong server token (401)");
+            return r.json();
+          }
+        );
       const results = [await post("/api/key", { api_key: key })];
       if (model) results.push(await post("/api/model", { model }));
       for (const data of results) serverState = { ...serverState, ...data };
       keyInput.value = "";
+      tokenInput.value = "";
       await refreshHealth();
     } catch (err) {
       keyHint.textContent = `Could not save: ${err.message}`;
@@ -234,7 +274,7 @@
     transcript = [];
     chat.innerHTML = "";
     try {
-      await fetch("/api/reset", { method: "POST" });
+      await fetch("/api/reset", { method: "POST", headers: serverHeaders() });
     } catch (_) {
       /* direct route still works without the server */
     }

@@ -37,6 +37,7 @@ _load_dotenv()
 @dataclass
 class Settings:
     api_key: str = ""
+    auth_token: str = ""
     model: str = DEFAULT_MODEL
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     max_turns: int = 40
@@ -49,6 +50,11 @@ class Settings:
         return bool(self.api_key.strip())
 
     @property
+    def auth_required(self) -> bool:
+        """True when callers must present JARVIS_AUTH_TOKEN."""
+        return bool(self.auth_token)
+
+    @property
     def is_mock(self) -> bool:
         return self.model.strip().lower() == MOCK_MODEL
 
@@ -56,6 +62,7 @@ class Settings:
         """A copy of these settings, used when a per-request key is supplied."""
         return Settings(
             api_key=self.api_key,
+            auth_token=self.auth_token,
             model=self.model,
             system_prompt=self.system_prompt,
             max_turns=self.max_turns,
@@ -70,6 +77,7 @@ def load_settings(**overrides: object) -> Settings:
     env = os.environ
     settings = Settings(
         api_key=env.get("GEMINI_API_KEY", "").strip(),
+        auth_token=env.get("JARVIS_AUTH_TOKEN", "").strip(),
         model=env.get("JARVIS_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL,
         system_prompt=env.get("JARVIS_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT).strip()
         or DEFAULT_SYSTEM_PROMPT,

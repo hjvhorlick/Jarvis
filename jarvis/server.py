@@ -7,6 +7,11 @@ Endpoints
     POST /api/key          set a runtime API key (memory only, never written to disk)
     POST /api/model        switch model at runtime (e.g. to "mock")
     POST /api/reset        clear the conversation
+
+When JARVIS_AUTH_TOKEN is set, every POST requires `Authorization: Bearer <token>`,
+so a public instance cannot be used to spend (or overwrite) the loaded API key.
+The key itself is never returned by any endpoint; responses carry a short
+non-reversible hint instead.
 """
 
 from __future__ import annotations
@@ -16,7 +21,9 @@ import time
 from pathlib import Path
 from typing import Iterator
 
-from fastapi import FastAPI, Request
+import hmac
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -25,6 +32,7 @@ from . import __version__
 from .config import Settings, load_settings
 from .llm import Assistant, JarvisError, MissingAPIKey
 from .memory import ASSISTANT, USER, Conversation, Message
+from .security import mask_key, redact
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
@@ -57,6 +65,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Jarvis", version=__version__)
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+    # ------------------------------------------------------------------- security
+    def require_token(
+        authorization: str | None = Header(default=None),
+        x_jarvis_token: str | None = Header(default=None),
+    ) -> None:
+        """Gate the mutating endpoints when JARVIS_AUTH_TOKEN is configured."""
+        if not settings.auth_token:
+            return
+        supplied = ""
+        if authorization and authorization.lower().startswith("bearer "):
+            supplied = authorization[7:].strip()
+        elif x_jarvis_token:
+            supplied = x_jarvis_token.strip()
+        if not hmac.compare_digest(supplied, settings.auth_token):
+            raise HTTPException(status_code=401, detail="invalid or missing token")
+
+    protected = [Depends(require_token)]
+
+    def safe(text: str) -> str:
+        """Strip the key (and any credential-shaped fragment) from a message."""
+        return redact(text, settings.api_key, settings.auth_token)
+
     # --------------------------------------------------------------------- state
     def current_assistant() -> Assistant:
         return Assistant(settings)
@@ -68,6 +98,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "model": settings.model,
             "provider": Assistant(settings).provider,
             "api_key_configured": settings.api_key_configured,
+            "api_key_hint": mask_key(settings.api_key),
+            "auth_required": settings.auth_required,
             "messages": [
                 {"role": m.role, "text": m.text} for m in conversation.history()
             ],
@@ -82,18 +114,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> JSONResponse:
         return JSONResponse(public_state())
 
-    @app.post("/api/key")
+    @app.post("/api/key", dependencies=protected)
     def set_key(payload: KeyRequest) -> JSONResponse:
         settings.api_key = payload.api_key.strip()
         return JSONResponse(
             {
                 "api_key_configured": settings.api_key_configured,
+                "api_key_hint": mask_key(settings.api_key),
                 "model": settings.model,
                 "provider": Assistant(settings).provider,
             }
         )
 
-    @app.post("/api/model")
+    @app.post("/api/model", dependencies=protected)
     def set_model(payload: ModelRequest) -> JSONResponse:
         """Switch model at runtime, e.g. to `mock` for an offline demo."""
         model = payload.model.strip()
@@ -107,13 +140,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
         )
 
-    @app.post("/api/reset")
+    @app.post("/api/reset", dependencies=protected)
     def reset() -> JSONResponse:
         conversation.reset()
         conversation.save()
         return JSONResponse(public_state())
 
-    @app.post("/api/chat")
+    @app.post("/api/chat", dependencies=protected)
     async def chat(payload: ChatRequest, request: Request) -> StreamingResponse:
         message = payload.message.strip()
         if not message:
@@ -162,11 +195,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     yield event("token", text=token)
             except (JarvisError, MissingAPIKey) as exc:
                 rollback()
-                yield event("error", message=str(exc))
+                yield event("error", message=safe(str(exc)))
                 return
             except Exception as exc:  # noqa: BLE001 - surface anything to the UI
                 rollback()
-                yield event("error", message=f"Unexpected failure: {exc}")
+                yield event("error", message=safe(f"Unexpected failure: {exc}"))
                 return
 
             flush()
@@ -198,7 +231,11 @@ def main(argv: list[str] | None = None) -> int:
             "         Tip: JARVIS_MODEL=mock runs fully offline.",
             flush=True,
         )
-    print(f"Jarvis {__version__} on http://{settings.host}:{settings.port} (model={settings.model})")
+    print(
+        f"Jarvis {__version__} on http://{settings.host}:{settings.port} "
+        f"(model={settings.model}, key={mask_key(settings.api_key) or 'none'}, "
+        f"auth={'on' if settings.auth_required else 'off'})"
+    )
     uvicorn.run(
         "jarvis.server:create_app",
         factory=True,
