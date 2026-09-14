@@ -32,7 +32,7 @@ from . import __version__
 from .config import Settings, load_settings
 from .llm import Assistant, JarvisError, MissingAPIKey
 from .memory import ASSISTANT, USER, Conversation, Message
-from .security import mask_key, redact
+from .security import SCRUBBED, mask_key, redact, scrub_message
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
@@ -151,6 +151,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         message = payload.message.strip()
         if not message:
             return JSONResponse({"detail": "message must not be empty"}, status_code=422)
+
+        # Scrub before anything else: the model must not see it either.
+        message = scrub_message(message)
+        if not message.replace(SCRUBBED, "").strip():
+            return JSONResponse(
+                {"detail": "message was empty or contained only a credential"},
+                status_code=422,
+            )
 
         # Clear any placeholder left by an earlier interrupted stream.
         if conversation.drop_blank_tail():

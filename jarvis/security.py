@@ -43,6 +43,30 @@ def redact(text: str, *secrets: str) -> str:
     return out
 
 
+# Credential shapes that should never be persisted or sent to a model, even
+# when a human pastes one into the chat box by mistake.
+_SECRET_SHAPES = (
+    re.compile(r"\bAIza[A-Za-z0-9_\-]{20,}\b"),   # legacy Google "traffic" key
+    re.compile(r"\bAQ\.[A-Za-z0-9_\-]{20,}\b"),   # Google AI Studio Auth key
+    re.compile(r"\bsk-[A-Za-z0-9_\-]{20,}\b"),     # OpenAI-style key
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),  # GitHub tokens
+)
+
+SCRUBBED = "[secret removed]"
+
+
+def scrub_message(text: str) -> str:
+    """Blank out credential-shaped tokens in a chat message.
+
+    Applied before a message is persisted or sent to the model, so a key pasted
+    into the chat box never reaches disk or a third party.
+    """
+    out = text or ""
+    for pattern in _SECRET_SHAPES:
+        out = pattern.sub(SCRUBBED, out)
+    return out
+
+
 def mask_key(key: str) -> str:
     """A short, non-reversible hint so a UI can show *which* key is loaded."""
     value = (key or "").strip()

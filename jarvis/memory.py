@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
+from .security import scrub_message
+
 USER = "user"
 ASSISTANT = "assistant"
 VALID_ROLES = (USER, ASSISTANT)
@@ -52,7 +54,8 @@ class Conversation:
 
     # ------------------------------------------------------------------ mutating
     def add(self, role: str, text: str) -> Message:
-        message = Message(role=role, text=text)
+        # Never persist a credential a human pasted into the chat box.
+        message = Message(role=role, text=scrub_message(text))
         self.messages.append(message)
         self._trim()
         self._maybe_save()

@@ -13,7 +13,7 @@ jarvis/
   server.py    FastAPI app: SSE chat API, runtime key/model switch, auth gate
   security.py  key redaction + masking
   web/         the chat UI (no build step, no JS dependencies)
-tests/         77 tests, all offline — no API key or network needed
+tests/         86 tests, all offline — no API key or network needed
 ```
 
 ## Setup
@@ -105,7 +105,7 @@ The Settings panel in the UI offers both:
 ## Tests
 
 ```bash
-python -m pytest          # 77 passed
+python -m pytest          # 86 passed
 ```
 
 The Gemini transport is driven by a stubbed client in tests, so the request
@@ -117,8 +117,14 @@ The API key is write-only. Once loaded it cannot be read back out:
 
 * **Never returned.** No endpoint echoes the key. `/api/health` reports only
   `api_key_configured` plus a masked hint such as `AQ.Ab8…000`.
-* **Never on disk.** It lives in process memory; only the conversation is
-  persisted. A test asserts the key appears in no file under the data dir.
+* **Never on disk.** The configured key lives in process memory; only the
+  conversation is persisted. A test asserts the key appears in no file under
+  the data dir.
+* **Not even if you paste it into the chat box.** `scrub_message()` blanks
+  credential-shaped tokens (`AQ.`, `AIza`, `sk-`, `ghp_`) from a message
+  *before* it is sent to the model or written to `history.json`, and a message
+  that was nothing but a credential is rejected with 422. Without this, a key
+  typed into the chat was persisted verbatim — and echoed back by the reply.
 * **Never in errors.** `jarvis/security.py` redacts the key — plus `key=`
   query params, `x-goog-api-key` and `Authorization: Bearer` values — from
   every message before it reaches the browser, the terminal, or a log line.

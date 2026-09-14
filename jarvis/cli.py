@@ -8,12 +8,14 @@ import sys
 from .config import load_settings
 from .llm import Assistant, JarvisError
 from .memory import ASSISTANT, USER, Conversation, Message
+from .security import scrub_message
 
 BANNER = "Jarvis — type a message, 'exit' to quit, 'reset' to clear history.\n"
 
 
 def ask(assistant: Assistant, conversation: Conversation, text: str) -> int:
     """Send one message, stream the reply, persist the exchange. 0 = ok."""
+    text = scrub_message(text)
     history = conversation.history() + [Message(role=USER, text=text)]
     print("jarvis: ", end="", flush=True)
     chunks: list[str] = []

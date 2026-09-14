@@ -211,11 +211,16 @@ def test_assistant_accepts_any_key_format(monkeypatch, key):
 
 
 def test_no_key_format_validation_in_the_codebase():
-    """Guard against anyone reintroducing an AIza regex, which would reject AQ. keys."""
+    """Guard against anyone reintroducing an AIza regex, which would reject AQ. keys.
+
+    security.py is excluded: it names the formats deliberately so it can scrub
+    them out of chat text. It never accepts or rejects a key.
+    """
     root = Path(__file__).resolve().parent.parent / "jarvis"
     offenders = []
     for path in root.rglob("*.py"):
-        source = path.read_text(encoding="utf-8")
-        if "AIza" in source:
+        if path.name == "security.py":
+            continue
+        if "AIza" in path.read_text(encoding="utf-8"):
             offenders.append(path.name)
     assert offenders == [], f"hardcoded key format assumption in: {offenders}"

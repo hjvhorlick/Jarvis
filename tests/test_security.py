@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from jarvis.config import Settings
 from jarvis.llm import Assistant, JarvisError, gemini_transport
-from jarvis.memory import USER, Message
+from jarvis.memory import USER, Conversation, Message
 from jarvis.security import REDACTED, mask_key, redact
 from jarvis.server import create_app
 
@@ -206,3 +206,84 @@ def test_ui_has_token_and_remember_controls(tmp_path):
     assert "function storeKey(key)" in script
     body = script.split("function storeKey(key)")[1].split("}")[0]
     assert "rememberKey.checked" in body
+
+
+# ------------------------------------------- keys pasted into the chat box
+PASTED = {
+    "AQ. Auth key": "AQ.Ab8RkeySomeoneTypedIntoTheChatBox123456789",
+    "AIza traffic key": "AIzaSyAkeySomeoneTypedIntoTheChatBox1234",
+    "OpenAI-style key": "sk-projAkeySomeoneTypedIntoTheChatBox12",
+    "GitHub token": "ghp_AkeySomeoneTypedIntoTheChatBox123",
+}
+
+
+@pytest.mark.parametrize("label", list(PASTED))
+def test_scrub_message_removes_pasted_credentials(label):
+    from jarvis.security import SCRUBBED, scrub_message
+
+    secret = PASTED[label]
+    out = scrub_message(f"is this my key? {secret} thanks")
+    assert secret not in out
+    assert SCRUBBED in out
+    assert "is this my key?" in out  # surrounding text survives
+
+
+def test_scrub_leaves_ordinary_text_alone():
+    from jarvis.security import scrub_message
+
+    for text in ("what is the weather?", "explain AQ. vs AIza key formats", "a=1 b=2"):
+        assert scrub_message(text) == text
+
+
+def test_pasted_key_never_reaches_disk(tmp_path):
+    client = make_client(tmp_path, model="mock")
+    secret = PASTED["AQ. Auth key"]
+    client.post("/api/chat", json={"message": f"is this my key? {secret}"})
+
+    events = [json.loads(line[5:]) for line in
+              client.post("/api/chat", json={"message": "again"}).text.split("\n\n")
+              if line.startswith("data:")]
+    stored = (tmp_path / "history.json").read_text(encoding="utf-8")
+    assert secret not in stored
+    assert "[secret removed]" in stored
+    # and it must not be echoed back through the API either
+    for response in (client.get("/api/health"),):
+        assert secret not in response.text
+
+
+def test_model_never_sees_a_pasted_key(tmp_path, monkeypatch):
+    """Scrubbing must happen before the request, not just before the write."""
+    seen = []
+
+    def fake_stream(self, history):
+        seen.extend(m.text for m in history)
+        yield "ok"
+
+    monkeypatch.setattr(Assistant, "stream", fake_stream)
+    client = make_client(tmp_path, model="mock")
+    secret = PASTED["AIza traffic key"]
+    client.post("/api/chat", json={"message": f"check {secret}"})
+    assert secret not in " ".join(seen)
+    assert any("[secret removed]" in text for text in seen)
+
+
+def test_chat_of_only_a_secret_is_rejected(tmp_path):
+    client = make_client(tmp_path, model="mock")
+    response = client.post("/api/chat", json={"message": PASTED["AQ. Auth key"]})
+    assert response.status_code == 422
+
+
+def test_cli_scrubs_before_sending(tmp_path, monkeypatch, capsys):
+    from jarvis.cli import ask
+
+    secret = PASTED["AQ. Auth key"]
+
+    class FakeAssistant:
+        def stream(self, history):
+            for message in history:
+                assert secret not in message.text
+            yield "done"
+
+    convo = Conversation(path=tmp_path / "history.json")
+    ask(FakeAssistant(), convo, f"is this mine? {secret}")
+    assert secret not in (tmp_path / "history.json").read_text(encoding="utf-8")
