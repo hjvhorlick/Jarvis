@@ -55,6 +55,16 @@ class Settings:
         return bool(self.auth_token)
 
     @property
+    def docs_enabled(self) -> bool:
+        """Interactive API docs: on locally, off on a token-gated public instance."""
+        override = os.environ.get("JARVIS_EXPOSE_DOCS", "").strip().lower()
+        if override in {"1", "true", "yes", "on"}:
+            return True
+        if override in {"0", "false", "no", "off"}:
+            return False
+        return not self.auth_required
+
+    @property
     def is_mock(self) -> bool:
         return self.model.strip().lower() == MOCK_MODEL
 

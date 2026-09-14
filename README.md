@@ -13,7 +13,7 @@ jarvis/
   server.py    FastAPI app: SSE chat API, runtime key/model switch, auth gate
   security.py  key redaction + masking
   web/         the chat UI (no build step, no JS dependencies)
-tests/         86 tests, all offline — no API key or network needed
+tests/         89 tests, all offline — no API key or network needed
 ```
 
 ## Setup
@@ -69,6 +69,7 @@ canned responder, so you can develop the UI without burning quota.
 | `JARVIS_PORT`         | `8000`                | Port                                       |
 | `JARVIS_DATA_DIR`     | `./data`              | Where `history.json` lives                 |
 | `JARVIS_AUTH_TOKEN`   | — (auth off)          | When set, every POST needs `Authorization: Bearer <token>` |
+| `JARVIS_EXPOSE_DOCS`  | auto                  | Force `/docs` + `/openapi.json` on (`1`) or off (`0`). Auto = off when a token is set |
 
 ## API
 
@@ -105,7 +106,7 @@ The Settings panel in the UI offers both:
 ## Tests
 
 ```bash
-python -m pytest          # 86 passed
+python -m pytest          # 89 passed
 ```
 
 The Gemini transport is driven by a stubbed client in tests, so the request
@@ -134,6 +135,16 @@ The API key is write-only. Once loaded it cannot be read back out:
   (constant-time compared). `/api/health` and the UI stay open so a page can
   still discover that a token is needed. Without it, anyone who can reach the
   port can use your key.
+* **Smaller surface when public.** Setting `JARVIS_AUTH_TOKEN` also hides
+  `/docs`, `/redoc` and `/openapi.json`, which otherwise publish the whole API
+  shape to anyone. Override with `JARVIS_EXPOSE_DOCS=1`.
+* **History is `0600`.** `data/history.json` is created through `tempfile` and
+  readable only by its owner.
+
+Audited and found clean: uvicorn access logs record `POST /api/key ... 200 OK`
+with no key value, and `OPTIONS /api/key` returns 405 with no CORS headers, so
+no other origin can drive the API from a browser.
+
 * **Browser side is opt-in.** A browser-direct key goes to `sessionStorage` and
   dies with the tab; the "Remember the key" checkbox is what moves it to
   `localStorage`.

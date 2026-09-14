@@ -287,3 +287,25 @@ def test_cli_scrubs_before_sending(tmp_path, monkeypatch, capsys):
     convo = Conversation(path=tmp_path / "history.json")
     ask(FakeAssistant(), convo, f"is this mine? {secret}")
     assert secret not in (tmp_path / "history.json").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------- API surface
+def test_docs_are_served_locally(tmp_path):
+    client = make_client(tmp_path)
+    for url in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(url).status_code == 200, url
+
+
+def test_docs_are_hidden_on_a_token_gated_instance(tmp_path):
+    client = make_client(tmp_path, auth_token=TOKEN)
+    for url in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(url).status_code == 404, url
+    # the app itself still works behind the gate
+    assert client.get("/").status_code == 200
+    assert client.get("/api/health").status_code == 200
+
+
+def test_docs_can_be_forced_back_on(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_EXPOSE_DOCS", "1")
+    client = make_client(tmp_path, auth_token=TOKEN)
+    assert client.get("/openapi.json").status_code == 200

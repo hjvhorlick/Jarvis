@@ -62,7 +62,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         autosave=False,
     )
 
-    app = FastAPI(title="Jarvis", version=__version__)
+    app = FastAPI(
+        title="Jarvis",
+        version=__version__,
+        # /docs and /openapi.json publish the whole API surface; hide them on a
+        # token-gated (i.e. internet-facing) instance unless explicitly enabled.
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url="/redoc" if settings.docs_enabled else None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
+    )
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
     # ------------------------------------------------------------------- security
