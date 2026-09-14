@@ -10,9 +10,9 @@ jarvis/
   memory.py    conversation history + JSON persistence
   llm.py       Gemini streaming client (transport is injectable)
   cli.py       terminal chat
-  server.py    FastAPI app + SSE chat API
+  server.py    FastAPI app: SSE chat API, runtime key/model switch
   web/         the chat UI (no build step, no JS dependencies)
-tests/         49 tests, all offline — no API key or network needed
+tests/         53 tests, all offline — no API key or network needed
 ```
 
 ## Setup
@@ -68,6 +68,7 @@ canned responder, so you can develop the UI without burning quota.
 | GET    | `/api/health` | Model, provider, key status, current messages           |
 | POST   | `/api/chat`   | `{"message": "…"}` → SSE stream of `start`/`token`/`done`/`error` |
 | POST   | `/api/key`    | `{"api_key": "…"}` → held in memory only, never written to disk |
+| POST   | `/api/model`  | `{"model": "…"}` → switch model at runtime, e.g. `mock`  |
 | POST   | `/api/reset`  | Clear the conversation                                  |
 
 Example:
@@ -77,6 +78,10 @@ curl -N -X POST localhost:8000/api/chat \
   -H 'Content-Type: application/json' \
   -d '{"message":"hello"}'
 ```
+
+Everything is configurable from the browser: the Settings panel sets the key,
+the model, and the route — no restart needed. Setting the model to `mock` gives
+you a working chat loop with zero API calls.
 
 ## Two ways to reach Google
 
@@ -91,7 +96,7 @@ The Settings panel in the UI offers both:
 ## Tests
 
 ```bash
-python -m pytest          # 49 passed
+python -m pytest          # 53 passed
 ```
 
 The Gemini transport is driven by a stubbed client in tests, so the request

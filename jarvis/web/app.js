@@ -5,6 +5,7 @@
   const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
   const LS_KEY = "jarvis.browserApiKey";
   const LS_ROUTE = "jarvis.route";
+  const LS_MODEL = "jarvis.model";
 
   const chat = document.getElementById("chat");
   const form = document.getElementById("composer");
@@ -17,6 +18,7 @@
   const keyInput = document.getElementById("apiKey");
   const keyHint = document.getElementById("keyHint");
   const saveKeyBtn = document.getElementById("saveKey");
+  const modelInput = document.getElementById("model");
   const resetBtn = document.getElementById("resetBtn");
 
   let serverState = { model: "gemini-2.5-flash", provider: "google-ai-studio", api_key_configured: false };
@@ -158,6 +160,7 @@
     try {
       const res = await fetch("/api/health");
       serverState = await res.json();
+      if (!modelInput.value) modelInput.value = localStorage.getItem(LS_MODEL) || serverState.model;
       const route = routeSel.value === "browser" ? "browser-direct" : "server";
       const keyed = routeSel.value === "browser" ? !!localStorage.getItem(LS_KEY) : serverState.api_key_configured;
       setStatus(
@@ -178,24 +181,29 @@
 
   async function saveKey() {
     const key = keyInput.value.trim();
+    const model = modelInput.value.trim();
     localStorage.setItem(LS_KEY, key);
+    localStorage.setItem(LS_MODEL, model || serverState.model);
+
     if (routeSel.value === "browser") {
       keyInput.value = "";
       await refreshHealth();
       return;
     }
     try {
-      const res = await fetch("/api/key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: key }),
-      });
-      const data = await res.json();
-      serverState = { ...serverState, ...data };
+      const post = (url, body) =>
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }).then((r) => r.json());
+      const results = [await post("/api/key", { api_key: key })];
+      if (model) results.push(await post("/api/model", { model }));
+      for (const data of results) serverState = { ...serverState, ...data };
       keyInput.value = "";
       await refreshHealth();
     } catch (err) {
-      keyHint.textContent = `Could not save key: ${err.message}`;
+      keyHint.textContent = `Could not save: ${err.message}`;
     }
   }
 

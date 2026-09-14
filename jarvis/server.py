@@ -5,6 +5,7 @@ Endpoints
     GET  /api/health       model, provider, key status
     POST /api/chat         SSE stream of tokens for one user message
     POST /api/key          set a runtime API key (memory only, never written to disk)
+    POST /api/model        switch model at runtime (e.g. to "mock")
     POST /api/reset        clear the conversation
 """
 
@@ -37,6 +38,10 @@ class ChatRequest(BaseModel):
 
 class KeyRequest(BaseModel):
     api_key: str = ""
+
+
+class ModelRequest(BaseModel):
+    model: str = ""
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -85,6 +90,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "api_key_configured": settings.api_key_configured,
                 "model": settings.model,
                 "provider": Assistant(settings).provider,
+            }
+        )
+
+    @app.post("/api/model")
+    def set_model(payload: ModelRequest) -> JSONResponse:
+        """Switch model at runtime, e.g. to `mock` for an offline demo."""
+        model = payload.model.strip()
+        if model:
+            settings.model = model
+        return JSONResponse(
+            {
+                "model": settings.model,
+                "provider": Assistant(settings).provider,
+                "api_key_configured": settings.api_key_configured,
             }
         )
 

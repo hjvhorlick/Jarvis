@@ -32,12 +32,17 @@
       <span>API key</span>
       <input id="apiKey" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false" />
     </label>
+    <label class="row">
+      <span>Model</span>
+      <input id="model" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false" />
+    </label>
     <p class="hint" id="keyHint"></p>
-    <button id="saveKey" class="primary">Save key</button>
+    <button id="saveKey" class="primary">Save</button>
     <p class="hint">
       Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>.
       The server-side key is held in memory only and is never written to disk.
       Use the direct route if the machine hosting this app cannot reach Google.
+      Set the model to <code>mock</code> to try the app with no API calls at all.
     </p>
   </section>
 

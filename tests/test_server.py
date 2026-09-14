@@ -175,3 +175,44 @@ def test_chat_echoes_the_prompt_in_mock_mode(tmp_path, message):
     client = make_client(tmp_path)
     events = sse_payloads(client.post("/api/chat", json={"message": message}).text)
     assert message in events[-1]["reply"]
+
+
+# ---------------------------------------------------------- runtime model switch
+def test_model_endpoint_switches_provider(tmp_path):
+    client = make_client(tmp_path, model="gemini-2.5-flash")
+    assert client.get("/api/health").json()["provider"] == "google-ai-studio"
+
+    response = client.post("/api/model", json={"model": "mock"})
+    assert response.status_code == 200
+    assert response.json()["model"] == "mock"
+    assert response.json()["provider"] == "mock"
+
+    events = sse_payloads(client.post("/api/chat", json={"message": "hi"}).text)
+    assert events[-1]["type"] == "done"
+
+
+def test_model_endpoint_ignores_blank_and_reports_health(tmp_path):
+    client = make_client(tmp_path, model="gemini-2.5-flash")
+    assert client.post("/api/model", json={"model": "   "}).json()["model"] == "gemini-2.5-flash"
+    assert client.get("/api/health").json()["model"] == "gemini-2.5-flash"
+
+
+def test_switching_to_real_model_without_key_fails_cleanly(tmp_path):
+    client = make_client(tmp_path, model="mock")
+    assert sse_payloads(client.post("/api/chat", json={"message": "hi"}).text)[-1]["type"] == "done"
+
+    client.post("/api/model", json={"model": "gemini-2.5-flash"})
+    events = sse_payloads(client.post("/api/chat", json={"message": "hi again"}).text)
+    assert events[-1]["type"] == "error"
+    assert "GEMINI_API_KEY" in events[-1]["message"]
+    # The successful mock turn is still on record; the failed one is not.
+    assert len(client.get("/api/health").json()["messages"]) == 2
+
+
+def test_ui_exposes_model_and_route_controls(tmp_path):
+    client = make_client(tmp_path)
+    index = client.get("/").text
+    for needle in ('id="model"', 'id="route"', 'id="apiKey"', "Browser → Google direct"):
+        assert needle in index, needle
+    script = client.get("/static/app.js").text
+    assert "/api/model" in script and "/api/key" in script
