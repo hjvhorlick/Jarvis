@@ -13,7 +13,8 @@ jarvis/
   server.py    FastAPI app: SSE chat API, runtime key/model switch, auth gate
   security.py  key redaction + masking
   web/         the chat UI (no build step, no JS dependencies)
-tests/         89 tests, all offline — no API key or network needed
+tests/web/     jsdom harness that drives the real app.js
+tests/         89 pytest tests + 24 browser checks, all offline
 ```
 
 ## Setup
@@ -111,6 +112,21 @@ python -m pytest          # 89 passed
 
 The Gemini transport is driven by a stubbed client in tests, so the request
 payload, chunk parsing, and error mapping are covered without network access.
+
+### Browser side
+
+`app.js` is not reachable from pytest, so it has its own harness that loads the
+shipped file into a jsdom DOM, stubs `fetch`, and asserts what it actually sends
+and renders — request shape, header placement, SSE reassembly across chunk
+boundaries, history replay, and the error paths.
+
+```bash
+npm install jsdom
+node tests/web/verify-ui.js                 # 24 checks
+node tests/web/verify-ui.js --jsdom-path /path/to/node_modules/jsdom
+```
+
+Exits 77 (skip) rather than failing if jsdom is not installed.
 
 ## Key protection
 
